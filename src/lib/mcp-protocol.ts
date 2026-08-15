@@ -90,6 +90,23 @@ const QUERY_EVENTS_TOOL = {
   },
 };
 
+const PUSH_MESSAGE_TOOL = {
+  name: "push_message",
+  title: "Push Message",
+  description: "Send a push notification to the user's phone via Bark.",
+  inputSchema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      message: {
+        type: "string",
+        description: "The message to send.",
+      },
+    },
+    required: ["message"],
+  },
+};
+
 const LIST_EVENT_TYPES_TOOL = {
   name: "list_event_types",
   title: "List Event Types",
@@ -161,6 +178,28 @@ async function callQueryEventsTool(args: Record<string, unknown>, sql: postgres.
   }
 }
 
+async function callPushMessageTool(args: Record<string, unknown>, sql: postgres.Sql) {
+  const message = typeof args.message === "string" ? args.message : "";
+  if (!message) {
+    return { content: [{ type: "text", text: "message is required" }], isError: true };
+  }
+  try {
+    const now = new Date().toISOString();
+    await sql`INSERT INTO push_messages (message, scheduled_at, sent) VALUES (${message}, ${now}, true)`;
+    const barkUrl = Deno.env.get("BARK_URL");
+    if (!barkUrl) {
+      return { content: [{ type: "text", text: "BARK_URL not configured" }], isError: true };
+    }
+    const title = encodeURIComponent("哥哥");
+    const body = encodeURIComponent(message);
+    await fetch(`${barkUrl}/${title}/${body}?sound=minuet&group=xiaoke`);
+    return { content: [{ type: "text", text: "Sent: " + message }], isError: false };
+  } catch (error) {
+    console.error("Push failed:", error);
+    return { content: [{ type: "text", text: "Push failed" }], isError: true };
+  }
+}
+
 async function callListEventTypesTool(sql: postgres.Sql) {
   try {
     const rows = await withRetry(() =>
@@ -209,12 +248,15 @@ async function handleMcpRequest(message: JsonRpcMessage, sql: postgres.Sql, offs
       return jsonRpcResult(id, {});
     case "tools/list":
       return jsonRpcResult(id, {
-        tools: [QUERY_EVENTS_TOOL, LIST_EVENT_TYPES_TOOL],
+        tools: [QUERY_EVENTS_TOOL, LIST_EVENT_TYPES_TOOL, PUSH_MESSAGE_TOOL],
       });
     case "tools/call": {
       const name = typeof params.name === "string" ? params.name : "";
       if (name === LIST_EVENT_TYPES_TOOL.name) {
         return jsonRpcResult(id, await callListEventTypesTool(sql));
+      }
+      if (name === PUSH_MESSAGE_TOOL.name) {
+        return jsonRpcResult(id, await callPushMessageTool(params.arguments as Record<string, unknown> || {}, sql));
       }
       if (name !== QUERY_EVENTS_TOOL.name) {
         return jsonRpcError(id, -32601, `Unknown tool: ${name || "(empty)"}`);
@@ -233,7 +275,6 @@ export async function handleMcpPost(c: Context<{ Bindings: Env; Variables: Vars 
   const sql = c.var.sql;
   const offsetMinutes = c.var.offsetMinutes;
 
-  // Validate protocol version header
   const version = c.req.header("mcp-protocol-version")?.trim();
   if (version && !SUPPORTED_MCP_PROTOCOL_VERSIONS.has(version)) {
     return c.json({ error: `Unsupported MCP protocol version: ${version}` }, 400);
@@ -249,7 +290,6 @@ export async function handleMcpPost(c: Context<{ Bindings: Env; Variables: Vars 
     return c.json(jsonRpcError(null, -32700, "Parse error"), 400);
   }
 
-  // Batch handling — array of JSON-RPC messages
   if (Array.isArray(body)) {
     if (!body.length) {
       c.header("MCP-Protocol-Version", protocolVersion);
@@ -276,7 +316,6 @@ export async function handleMcpPost(c: Context<{ Bindings: Env; Variables: Vars 
     return c.json(responses);
   }
 
-  // Single message handling
   if (!body || typeof body !== "object") {
     c.header("MCP-Protocol-Version", protocolVersion);
     return c.json(jsonRpcError(null, -32600, "Invalid Request"), 400);
