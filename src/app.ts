@@ -105,7 +105,7 @@ export function createApp(options?: AppOptions) {
     let sentCount = 0;
     for (const msg of pending) {
       try {
-        const title = encodeURIComponent("小克");
+        const title = encodeURIComponent("哥哥");
         const body = encodeURIComponent(msg.message);
         await fetch(`${barkUrl}/${title}/${body}?sound=minuet&group=xiaoke`);
         await sql`UPDATE push_messages SET sent = true WHERE id = ${msg.id}`;
