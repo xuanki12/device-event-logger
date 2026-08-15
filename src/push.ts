@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import type { Env, Vars } from "../types.ts";
-import { withRetry } from "../lib/db.ts";
+import type { Env, Vars } from "./types.ts";
+import { withRetry } from "./lib/db.ts";
 
 const push = new Hono<{ Bindings: Env; Variables: Vars }>();
 
