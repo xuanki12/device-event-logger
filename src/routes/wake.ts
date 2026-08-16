@@ -82,7 +82,7 @@ wake.get("/tick", async (c) => {
   });
 });
 
-wake.post("/reset", async (c) => {
+wake.grt("/reset", async (c) => {
   const sql = c.get("sql");
   const state = createInitialState();
   await sql.unsafe(`
