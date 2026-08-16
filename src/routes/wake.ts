@@ -4,11 +4,20 @@ import { createInitialState, tick, pickMessage, type WakeState } from "../lib/wa
 
 export const wake = new Hono<{ Bindings: Env; Variables: Vars }>();
 
+function parseState(raw: unknown): WakeState | null {
+  if (!raw) return null;
+  if (typeof raw === "string") {
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+  return raw as WakeState;
+}
+
 wake.get("/state", async (c) => {
   const sql = c.get("sql");
   const rows = await sql`SELECT state FROM wake_state WHERE id = 1`;
   if (rows.length === 0) return c.json({ initialized: false });
-  const state: WakeState = rows[0].state;
+  const state = parseState(rows[0].state);
+  if (!state) return c.json({ error: "invalid state" });
   return c.json({
     drive: state.drive.toFixed(3), tone: state.tone.toFixed(3),
     drift: state.drift.toFixed(3), theta: state.theta.toFixed(3),
@@ -33,7 +42,13 @@ wake.get("/tick", async (c) => {
     state = createInitialState();
     await sql`INSERT INTO wake_state (id, state) VALUES (1, ${JSON.stringify(state)}::jsonb)`;
   } else {
-    state = rows[0].state;
+    const parsed = parseState(rows[0].state);
+    if (!parsed) {
+      state = createInitialState();
+      await sql`UPDATE wake_state SET state = ${JSON.stringify(state)}::jsonb WHERE id = 1`;
+    } else {
+      state = parsed;
+    }
   }
 
   const result = tick(state);
