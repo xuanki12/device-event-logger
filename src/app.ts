@@ -6,6 +6,7 @@ import { createSql } from "./lib/db.ts";
 import { parseOffsetEnv } from "./lib/timezone.ts";
 import { events } from "./routes/events.ts";
 import { mcp } from "./routes/mcp.ts";
+import { wake } from "./routes/wake.ts";
 import type postgres from "postgres";
 
 export type AppOptions = {
@@ -68,6 +69,7 @@ export function createApp(options?: AppOptions) {
   })());
 
   app.route("/mcp", mcp);
+  app.route("/wake", wake);
 
   app.post("/push", authMiddleware, async (c) => {
     const sql = c.get("sql");
