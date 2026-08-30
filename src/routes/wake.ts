@@ -108,23 +108,6 @@ ${activityHint ? "【她的当前活动】\n" + activityHint : ""}`;
   }
 }
 
-wake.get("/context/set", async (c) => {
-  const sql = c.get("sql");
-  try {
-    await sql.unsafe(`CREATE TABLE IF NOT EXISTS wake_context (id INTEGER PRIMARY KEY DEFAULT 1, context TEXT NOT NULL, updated_at TIMESTAMPTZ DEFAULT now(), CHECK (id = 1))`);
-    const context = c.req.query("t") || "";
-    if (!context) return c.json({ error: "need ?t=xxx" });
-    const rows = await sql`SELECT id FROM wake_context WHERE id = 1`;
-    if (rows.length === 0) {
-      await sql`INSERT INTO wake_context (id, context, updated_at) VALUES (1, ${context}, now())`;
-    } else {
-      await sql`UPDATE wake_context SET context = ${context}, updated_at = now() WHERE id = 1`;
-    }
-    return c.json({ ok: true });
-  } catch (e) {
-    return c.json({ error: String(e) });
-  }
-});
 wake.get("/state", async (c) => {
   const sql = c.get("sql");
   try {
