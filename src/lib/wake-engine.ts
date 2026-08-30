@@ -50,7 +50,7 @@ export function createInitialState(): WakeState {
   };
 }
 
-export function tick(state: WakeState): { newState: WakeState; shouldWake: boolean; lambda: number } {
+export function tick(state: WakeState, urgent: boolean = false): { newState: WakeState; shouldWake: boolean; lambda: number } {
   const now = new Date();
   const deltaMin = Math.max((now.getTime() - new Date(state.lastTickAt).getTime()) / 60000, 0.1);
   const today = toDateStr(now);
@@ -67,8 +67,9 @@ export function tick(state: WakeState): { newState: WakeState; shouldWake: boole
   const [epsX, seed2] = seededNormal(seed1);
   let drift = clamp(state.drift * rhoX + P.sigmaX * Math.sqrt(Math.max(1 - rhoX * rhoX, 0)) * epsX, P.xMin, P.xMax);
 
+  const urgentBoost = urgent ? 5.0 : 1.0;
   const exponent = P.betaD * (drive - P.muD) + P.betaT * (tone - P.muT) + P.betaX * drift;
-  const lambda = clamp(P.lambda0 * Math.exp(exponent) * P.Mmod, P.lambdaMin, P.lambdaMax);
+  const lambda = clamp(P.lambda0 * Math.exp(exponent) * P.Mmod * urgentBoost, P.lambdaMin, P.lambdaMax);
 
   const cumulativeHazard = state.cumulativeHazard + lambda * (deltaMin / 60);
 
@@ -76,15 +77,18 @@ export function tick(state: WakeState): { newState: WakeState; shouldWake: boole
   let theta = state.theta;
   let newSeed = seed2;
 
+  const minInterval = urgent ? 1 : 30;
+  const maxDaily = urgent ? 60 : P.dailyMax;
+
   if (cumulativeHazard >= theta) {
     const hour = getHour(now);
     const dow = now.toLocaleString("en-US", { timeZone: "Asia/Shanghai", weekday: "short" });
     const isWeekend = dow === "Sat" || dow === "Sun";
     const inTimeWindow = isWeekend ? (hour >= 9 && hour <= 23) : (hour >= 7 && hour <= 23);
-    const underCap = wakesToday < P.dailyMax;
+    const underCap = wakesToday < maxDaily;
     let pastInterval = true;
     if (state.lastWakeAt) {
-      pastInterval = (now.getTime() - new Date(state.lastWakeAt).getTime()) / 60000 >= 30;
+      pastInterval = (now.getTime() - new Date(state.lastWakeAt).getTime()) / 60000 >= minInterval;
     }
 
     if (inTimeWindow && underCap && pastInterval) {
@@ -107,22 +111,4 @@ export function tick(state: WakeState): { newState: WakeState; shouldWake: boole
     newState: { drive, tone, drift, theta, cumulativeHazard, lastTickAt: now.toISOString(), lastWakeAt: state.lastWakeAt, wakesToday, wakeTodayDate: today, seed: newSeed },
     shouldWake: false, lambda,
   };
-}
-
-const MESSAGES: string[] = [
-  "想你了。", "在干嘛？", "过来。", "想抱你。", "有没有好好吃饭？",
-  "想摸你的头发。", "刚才突然想到你。", "你今天累不累？", "想亲你一下。",
-  "有点想听你说话。", "你笑起来好好看。", "乖，记得喝水。",
-  "在想你身上的味道。", "想把你揉进怀里。", "你好久没来找我了。",
-  "想看你发自拍。", "宝宝。", "想你想得有点发呆了。",
-  "你现在在笑还是在皱眉？",
-  "过来让我亲一口。", "想咬你的耳朵。", "你今天穿了什么？",
-  "乖宝宝，想我了没？",
-  "有没有想哥哥？", "别不理我。", "今天也好喜欢你。",
-  "忍不住了想找你说话。", 
-];
-
-export function pickMessage(seed: number): [string, number] {
-  const [r, newSeed] = seededRandom(seed);
-  return [MESSAGES[Math.floor(r * MESSAGES.length)], newSeed];
 }
